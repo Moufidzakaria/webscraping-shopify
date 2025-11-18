@@ -1,12 +1,11 @@
-// src/main.ts
 import express from 'express';
 import mongoose from 'mongoose';
 import { PlaywrightCrawler } from 'crawlee';
 import { createClient } from 'redis';
 
 // -------------------- CONFIG --------------------
-const MONGO_URL = 'mongodb://localhost:27017/shop';
-const REDIS_URL = 'redis://localhost:6379';
+const MONGO_URL = 'mongodb://mongodb:27017/shop';  // mongodb = service name docker
+const REDIS_URL = 'redis://redis:6379';            // redis = service name docker
 const BASE_URL = 'https://warehouse-theme-metal.myshopify.com/collections/headphones';
 const PORT = 3000;
 
@@ -35,7 +34,6 @@ async function runScraper() {
             const productsData = await page.$$eval('div.product-item', items =>
                 items.map(item => {
                     const name = item.querySelector('.product-item__title')?.textContent?.trim() || null;
-
                     const priceSpans = item.querySelectorAll('span.price');
                     let price: number | null = null;
                     for (const span of priceSpans) {
@@ -45,7 +43,6 @@ async function runScraper() {
                             break;
                         }
                     }
-
                     const image = item.querySelector('img')?.src || null;
                     const url = item.querySelector('a')?.href || null;
                     return { name, price, image, url };
@@ -75,7 +72,6 @@ async function runServer() {
     const app = express();
     app.use(express.json());
 
-    // GET all products
     app.get('/products', async (req, res) => {
         const cached = await redisClient.get('all_products');
         if (cached) return res.json(JSON.parse(cached));
@@ -85,7 +81,6 @@ async function runServer() {
         res.json(products);
     });
 
-    // GET product by ID
     app.get('/products/:id', async (req, res) => {
         const { id } = req.params;
         const cached = await redisClient.get(`product_${id}`);
@@ -98,7 +93,6 @@ async function runServer() {
         res.json(product);
     });
 
-    // Search by name
     app.get('/products/search/:keyword', async (req, res) => {
         const { keyword } = req.params;
         const regex = new RegExp(keyword, 'i');
@@ -111,10 +105,18 @@ async function runServer() {
 
 // -------------------- MAIN --------------------
 async function main() {
-    await mongoose.connect(MONGO_URL);
-    await redisClient.connect(); // <-- une seule connexion
-    runScraper();  // lancer le scraper une seule fois
-    runServer();   // lancer l'API
+    try {
+        await mongoose.connect(MONGO_URL);
+        console.log('✅ MongoDB connecté');
+
+        await redisClient.connect();
+        console.log('✅ Redis connecté');
+
+        runServer();          // serveur Express
+        await runScraper();   // lancer scraper
+    } catch (err) {
+        console.error('Erreur main:', err);
+    }
 }
 
 main();
