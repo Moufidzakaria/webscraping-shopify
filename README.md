@@ -8,3 +8,4 @@ You can find more examples and documentation at the following links:
 - `PlaywrightCrawler` [API documentation](https://crawlee.dev/js/api/playwright-crawler/class/PlaywrightCrawler)
 - Other [examples](https://crawlee.dev/js/docs/examples/playwright-crawler)
 # web-scraping-shopify
+# shoipfy-scraping
