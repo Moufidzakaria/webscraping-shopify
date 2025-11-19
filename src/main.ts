@@ -2,10 +2,11 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { PlaywrightCrawler } from 'crawlee';
 import { createClient } from 'redis';
+import rateLimit from 'express-rate-limit';   // ⬅️ 1) أضفناه هنا
 
 // -------------------- CONFIG --------------------
-const MONGO_URL = 'mongodb://mongodb:27017/shop';  // mongodb = service name docker
-const REDIS_URL = 'redis://redis:6379';            // redis = service name docker
+const MONGO_URL = 'mongodb://mongodb:27017/shop';
+const REDIS_URL = 'redis://redis:6379';
 const BASE_URL = 'https://warehouse-theme-metal.myshopify.com/collections/headphones';
 const PORT = 3000;
 
@@ -23,6 +24,21 @@ const Product = mongoose.model('Product', productSchema);
 const redisClient = createClient({ url: REDIS_URL });
 redisClient.on('error', err => console.error('Redis Error', err));
 
+// -------------------- RATE LIMIT --------------------
+// ⬅️ 2) تحديد limit عام على جميع API routes
+const globalLimiter = rateLimit({
+    windowMs: 60 * 1000,       // 1 minute
+    max: 60,                   // 60 requests per minute لكل IP
+    message: { error: 'Too many requests, try again later.' }
+});
+
+// ⬅️ 3) limiter خاص ببعض routes فقط
+const productLimiter = rateLimit({
+    windowMs: 30 * 1000,       // 30 seconds
+    max: 20,                   // 20 requests فقط
+    message: { error: 'Rate limit reached for product endpoints.' }
+});
+
 // -------------------- SCRAPER --------------------
 async function runScraper() {
     const crawler = new PlaywrightCrawler({
@@ -35,7 +51,8 @@ async function runScraper() {
                 items.map(item => {
                     const name = item.querySelector('.product-item__title')?.textContent?.trim() || null;
                     const priceSpans = item.querySelectorAll('span.price');
-                    let price: number | null = null;
+                    let price = null;
+
                     for (const span of priceSpans) {
                         const match = span.textContent?.match(/[\d,.]+/);
                         if (match) {
@@ -43,8 +60,10 @@ async function runScraper() {
                             break;
                         }
                     }
+
                     const image = item.querySelector('img')?.src || null;
                     const url = item.querySelector('a')?.href || null;
+
                     return { name, price, image, url };
                 })
             );
@@ -72,7 +91,11 @@ async function runServer() {
     const app = express();
     app.use(express.json());
 
-    app.get('/products', async (req, res) => {
+    // ⬅️ 4) تطبيق rate limit على جميع API routes
+    app.use(globalLimiter);
+
+    // ------------- API ROUTES ---------------
+    app.get('/products', productLimiter, async (req, res) => {
         const cached = await redisClient.get('all_products');
         if (cached) return res.json(JSON.parse(cached));
 
@@ -81,8 +104,9 @@ async function runServer() {
         res.json(products);
     });
 
-    app.get('/products/:id', async (req, res) => {
+    app.get('/products/:id', productLimiter, async (req, res) => {
         const { id } = req.params;
+
         const cached = await redisClient.get(`product_${id}`);
         if (cached) return res.json(JSON.parse(cached));
 
@@ -93,13 +117,14 @@ async function runServer() {
         res.json(product);
     });
 
-    app.get('/products/search/:keyword', async (req, res) => {
+    app.get('/products/search/:keyword', productLimiter, async (req, res) => {
         const { keyword } = req.params;
         const regex = new RegExp(keyword, 'i');
         const products = await Product.find({ name: regex });
         res.json(products);
     });
 
+    // ------------------ SERVER ------------------
     app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 }
 
@@ -112,8 +137,8 @@ async function main() {
         await redisClient.connect();
         console.log('✅ Redis connecté');
 
-        runServer();          // serveur Express
-        await runScraper();   // lancer scraper
+        runServer();
+        await runScraper();
     } catch (err) {
         console.error('Erreur main:', err);
     }

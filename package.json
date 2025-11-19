@@ -6,6 +6,7 @@
     "dependencies": {
         "crawlee": "^3.0.0",
         "express": "^5.1.0",
+        "express-rate-limit": "^8.2.1",
         "mongoose": "^8.20.0",
         "playwright": "*",
         "redis": "^5.9.0"
