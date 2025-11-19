@@ -8,6 +8,7 @@ const MONGO_URL = 'mongodb://mongodb:27017/shop';
 const REDIS_URL = 'redis://redis:6379';
 const PORT = 3000;
 
+// --- MongoDB Schema ---
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true },
   price: { type: Number, default: null },
@@ -16,14 +17,27 @@ const productSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const Product = mongoose.model('Product', productSchema);
+
+// --- Redis Client ---
 const redisClient = createClient({ url: REDIS_URL });
 redisClient.on('error', err => console.error('Redis Error', err));
 
+// --- Rate Limiters ---
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
   message: { error: 'Too many requests, try again later.' }
 });
+
+const apiKeys = ["CLIENT_KEY_1", "CLIENT_KEY_2"]; // كل مستخدم RapidAPI key خاص به
+
+function checkApiKey(req, res, next) {
+  const key = req.header('x-api-key');
+  if (!key || !apiKeys.includes(key)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
 
 const productLimiter = rateLimit({
   windowMs: 30 * 1000,
@@ -31,6 +45,7 @@ const productLimiter = rateLimit({
   message: { error: 'Rate limit reached for product endpoints.' }
 });
 
+// --- Scraper Shopify ---
 async function runScraper() {
   const crawler = new PlaywrightCrawler({
     headless: true,
@@ -58,6 +73,7 @@ async function runScraper() {
   console.log('Scraping terminé !');
 }
 
+// --- Express Server ---
 async function runServer() {
   const app = express();
   app.use(express.json());
@@ -65,9 +81,11 @@ async function runServer() {
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-  app.get('/products', productLimiter, async (req, res) => {
+  // Protected API endpoint
+  app.get('/products', productLimiter, checkApiKey, async (req, res) => {
     const cached = await redisClient.get('all_products');
     if (cached) return res.json(JSON.parse(cached));
+
     const products = await Product.find();
     await redisClient.setEx('all_products', 60, JSON.stringify(products));
     res.json(products);
@@ -76,6 +94,7 @@ async function runServer() {
   app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 }
 
+// --- Main ---
 async function main() {
   await mongoose.connect(MONGO_URL);
   await redisClient.connect();
