@@ -29,11 +29,10 @@ jobs:
         run: docker compose -f docker-compose.ci.yml up -d --build
 
       - name: Wait for services to be ready
-        run: sleep 10
+        run: sleep 15
 
       - name: Test API container
-        run: |
-          curl -f http://localhost:3000 || exit 1
+        run: curl -f http://localhost:3000/health || exit 1
 
       - name: List running containers
         run: docker ps
