@@ -1,28 +1,18 @@
-mkdir -p .github/workflows
-echo "name: Node.js Docker CI/CD
+name: Node.js Docker CI/CD
 
 on:
   push:
-    branches: [ 'main' ]
+    branches: [main]
   pull_request:
-    branches: [ 'main' ]
+    branches: [main]
 
 jobs:
-  docker-test:
+  build-and-test:
     runs-on: ubuntu-latest
 
-    services:
-      mongo:
-        image: mongo:7
-        ports:
-          - 27017:27017
-      redis:
-        image: redis:8
-        ports:
-          - 6379:6379
-
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -36,8 +26,17 @@ jobs:
         run: docker build -t web-scraper-api .
 
       - name: Run Docker Compose
-        run: docker-compose up -d
+        run: docker-compose -f docker-compose.ci.yml up -d --build
+
+      - name: Wait for services to be ready
+        run: sleep 10
 
       - name: Test API container
+        run: |
+          curl -f http://localhost:3000 || exit 1
+
+      - name: List running containers
         run: docker ps
 
+      - name: Shutdown Docker Compose
+        run: docker-compose -f docker-compose.ci.yml down
