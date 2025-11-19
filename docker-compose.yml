@@ -3,7 +3,6 @@ version: '3.9'
 services:
   mongodb:
     image: mongo:7
-    container_name: mongodb
     ports:
       - "27017:27017"
     volumes:
@@ -11,13 +10,11 @@ services:
 
   redis:
     image: redis:8
-    container_name: redis
     ports:
       - "6379:6379"
 
   web-scraper-api:
     build: .
-    container_name: web-scraper-api
     working_dir: /usr/src/app
     volumes:
       - ./:/usr/src/app
