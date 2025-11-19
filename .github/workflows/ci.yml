@@ -26,10 +26,10 @@ jobs:
         run: docker build -t web-scraper-api .
 
       - name: Run Docker Compose
-        run: docker compose -f docker-compose.ci.yml up -d --build
+        run: docker compose -f docker-compose.yml up -d --build
 
       - name: Wait for services to be ready
-        run: sleep 15
+        run: sleep 20
 
       - name: Test API container
         run: curl -f http://localhost:3000/health || exit 1
@@ -38,4 +38,4 @@ jobs:
         run: docker ps
 
       - name: Shutdown Docker Compose
-        run: docker compose -f docker-compose.ci.yml down
+        run: docker compose -f docker-compose.yml down
